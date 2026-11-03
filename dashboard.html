@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XR 설문 실시간 대시보드</title>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
+  --tycoon:#2a78d6; --story:#e34948;                     /* 게임 정체성: 주문이요=파랑, Like Korean=빨강 */
+  --t3:#1c5cab; --t2:#3987e5; --t1:#86b6ef;              /* 주문이요 쪽 3·2·1 */
+  --mid:#cfcdc4;                                           /* 비슷함(0) */
+  --s1:#ee9592; --s2:#e34948; --s3:#a92a2b;              /* Like Korean 쪽 1·2·3 */
+  --ci:#86b6ef; --neutral:#6f6e69; --warn:#b4430c;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+    --tycoon:#3987e5; --story:#e66767;
+    --t3:#86b6ef; --t2:#3987e5; --t1:#184f95;
+    --mid:#4a4a46;
+    --s1:#9a2c2d; --s2:#e66767; --s3:#f2a3a1;
+    --ci:#256abf; --neutral:#a3a29b; --warn:#fb923c;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink)}
+body{font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;font-size:14px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+h1{font-size:20px;margin:0}
+.sub{color:var(--ink2);font-size:13px;margin-top:2px}
+.sub a{color:var(--ink2)}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-weight:600;padding:7px 14px;border-radius:8px;border:1px solid var(--axis);background:var(--surface);color:var(--ink);cursor:pointer}
+label.auto{display:flex;gap:6px;align-items:center;color:var(--ink2)}
+.banner{background:var(--surface);border:1px solid var(--axis);border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;margin-bottom:12px;color:var(--ink2)}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.filters label{color:var(--ink2);font-size:13px;display:flex;gap:6px;align-items:center}
+.filters select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--axis);background:var(--surface);color:var(--ink)}
+.filters .count{color:var(--muted);font-size:13px}
+main{transition:opacity .2s}
+main.loading{opacity:.55}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+.tile{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:14px 16px}
+.tile .lab{color:var(--ink2);font-size:13px}
+.tile .val{font-size:28px;font-weight:600;margin-top:2px}
+.tile .val.hero{font-size:48px;line-height:1.1}
+.tile .note{color:var(--muted);font-size:12.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.grid2 .card{margin-bottom:0}
+.card h2{font-size:15px;margin:0}
+.card .desc{color:var(--ink2);font-size:13px;margin:2px 0 14px}
+.empty{color:var(--muted);padding:12px 0}
+/* 가로 막대 (국적) */
+.hb{display:grid;grid-template-columns:96px 1fr 44px;gap:8px;align-items:center;margin:6px 0}
+.hb .lab{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .track{position:relative;height:20px}
+.hb .bar{position:absolute;left:0;top:0;bottom:0;background:var(--neutral);border-radius:0 4px 4px 0;min-width:2px}
+.hb .num{font-variant-numeric:tabular-nums;color:var(--ink)}
+/* 분할 막대 (D1) */
+.seg{display:flex;height:28px;gap:2px;margin:6px 0 10px}
+.seg div{border-radius:4px;color:#fff;font-weight:600;font-size:13px;display:flex;align-items:center;padding-left:8px;white-space:nowrap;overflow:visible;min-width:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--ink2);font-size:13px;align-items:center}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+/* 양극 누적 막대 (D2) */
+.dv{display:grid;grid-template-columns:150px 1fr 96px;gap:10px;align-items:center}
+.dv .lab{color:var(--ink)}
+.dv .lab small{display:block;color:var(--muted);font-size:12px}
+.dv .track{position:relative;height:20px}
+.dv .gl{position:absolute;top:-5px;bottom:-5px;width:1px;background:var(--grid)}
+.dv .gl.c{background:var(--axis)}
+.dv .sgm{position:absolute;top:0;bottom:0;border-right:2px solid var(--surface)}
+.dv .m{font-variant-numeric:tabular-nums;text-align:right}
+.dv .m small{display:block;color:var(--muted);font-size:12px}
+.dvrow{margin:10px 0}
+.axis{display:grid;grid-template-columns:150px 1fr 96px;gap:10px;color:var(--muted);font-size:12px;margin-top:4px}
+.axis .ticks{position:relative;height:16px}
+.axis .ticks span{position:absolute;transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.sides{display:grid;grid-template-columns:150px 1fr 96px;gap:10px;color:var(--ink2);font-size:12.5px;margin-bottom:6px}
+.sides .in{display:flex;justify-content:space-between}
+/* 점 그래프 (Part B) */
+.dp{display:grid;grid-template-columns:170px 1fr 96px;gap:10px;align-items:center;margin:4px 0}
+.dp .track{position:relative;height:24px}
+.dp .gl{position:absolute;top:0;bottom:0;width:1px;background:var(--grid)}
+.dp .gl.c{background:var(--axis)}
+.dp .ci{position:absolute;top:11px;height:2px;background:var(--ci);border-radius:1px}
+.dp .dot{position:absolute;top:7px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--tycoon);box-shadow:0 0 0 2px var(--surface)}
+.dp .hit{position:absolute;top:0;bottom:0;width:28px;margin-left:-14px}
+.dp .m{font-variant-numeric:tabular-nums;text-align:right}
+.dp .m small{color:var(--muted);font-size:12px;margin-left:4px}
+.dpaxis{display:grid;grid-template-columns:170px 1fr 96px;gap:10px;color:var(--muted);font-size:12px}
+.dpaxis .ticks{position:relative;height:16px}
+.dpaxis .ticks span{position:absolute;transform:translateX(-50%)}
+.grp{color:var(--muted);font-size:12px;margin:12px 0 2px}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.mini .tile{padding:10px 12px}
+.mini .tile .val{font-size:22px}
+details{margin-top:12px;color:var(--ink2)}
+summary{cursor:pointer;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid)}
+th{color:var(--ink2);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+/* 개방형 */
+#openList{max-height:620px;overflow-y:auto}
+.oe{border-top:1px solid var(--grid);padding:10px 0}
+.oe:first-child{border-top:0}
+.oe .meta{color:var(--muted);font-size:12.5px;margin-bottom:4px}
+.oe .meta .chip{display:inline-flex;align-items:center;gap:4px;color:var(--ink2)}
+.oe .qa{margin:2px 0}
+.oe .qa b{color:var(--ink2);font-weight:600;font-size:12.5px;margin-right:6px}
+#tip{position:fixed;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--axis);border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;z-index:10;max-width:280px}
+#tip .v{font-weight:700}
+#tip .k{color:var(--ink2)}
+[data-tip]{cursor:default}
+[data-tip]:hover{filter:brightness(1.08)}
+.err{color:var(--warn)}
+@media (max-width:760px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2{grid-template-columns:1fr}
+  .dv,.axis{grid-template-columns:96px 1fr 64px}
+  .sides{display:block}
+  .sides > span{display:none}
+  .sides .in{white-space:nowrap}
+  .dp,.dpaxis{grid-template-columns:110px 1fr 70px}
+  .tile .val.hero{font-size:40px}
+  .mini{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>XR 한국어 학습 게임 설문 · 실시간 응답</h1>
+      <div class="sub"><span id="status">불러오는 중…</span> <span id="sheetLink"></span></div>
+    </div>
+    <div class="actions">
+      <label class="auto"><input type="checkbox" id="auto" checked> 30초마다 자동 갱신</label>
+      <button class="btn" id="refresh" type="button">새로고침</button>
+    </div>
+  </header>
+  <div class="banner" id="banner" hidden>미리보기: 예시 데이터로 그린 화면입니다. 실제 응답은 배포된 대시보드 주소(…/dashboard?key=…)에서 보입니다.</div>
+  <div class="filters">
+    <label>국적 <select id="fNat">
+      <option value="">전체</option><option value="KR">한국</option><option value="JP">일본</option>
+      <option value="VN">베트남</option><option value="UZ">우즈베키스탄</option><option value="OTHER">기타</option>
+    </select></label>
+    <label>「주문이요」 체험 <select id="fXr">
+      <option value="">전체</option><option value="yes">체험함</option><option value="none">체험 안 함</option>
+    </select></label>
+    <span class="count" id="fCount"></span>
+  </div>
+  <main id="main">
+    <section class="kpis" id="kpis"></section>
+    <div class="grid2">
+      <div class="card"><h2>국적별 응답</h2><div class="desc">응답 수, 많은 순</div><div id="natChart"></div></div>
+      <div class="card"><h2>둘 중 하나만 한다면 (D1)</h2><div class="desc">시연 영상을 본 뒤 고른 게임</div><div id="d1Chart"></div></div>
+    </div>
+    <div class="card">
+      <h2>두 게임 비교 (D2)</h2>
+      <div class="desc">각 영역에서 어느 게임 쪽으로 기울었는지의 응답 분포. 가운데 0은 ‘비슷함’, 오른쪽 평균은 −3(주문이요 쪽)…+3(Like Korean 쪽).</div>
+      <div id="d2Legend" class="legend" style="margin-bottom:12px"></div>
+      <div id="d2Chart"></div>
+      <details><summary>표로 보기</summary><div class="tablewrap" id="d2Table"></div></details>
+    </div>
+    <div class="card">
+      <h2>「주문이요」 체험 후 평가 (Part B)</h2>
+      <div class="desc">직접 체험한 참여자만 · 영역별 평균(점)과 95% 신뢰구간(선), 1–7점, 4 = 보통</div>
+      <div id="bMini" class="mini"></div>
+      <div id="bChart"></div>
+      <details><summary>표로 보기</summary><div class="tablewrap" id="bTable"></div></details>
+    </div>
+    <div class="card"><h2>개방형 응답</h2><div class="desc">최근 응답부터 · 참여자가 쓴 언어 그대로</div><div id="openList"></div></div>
+    <div class="card"><h2>최근 응답</h2><div class="desc">최근 20건</div><div class="tablewrap" id="recent"></div></div>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script src="/config.js"></script>
+<script>
+var GAS = (typeof google !== 'undefined' && google.script && google.script.run) ? true : false;
+var API_URL = (window.SURVEY_CONFIG && window.SURVEY_CONFIG.API_URL) || '';   // Vercel 배포 시 config.js에서 받음
+var LIVE = GAS || !!API_URL;
+var NAT = { KR:'한국', JP:'일본', VN:'베트남', UZ:'우즈베키스탄', OTHER:'기타' };
+var LANG = { ko:'한국어', en:'English', ja:'日本語', vi:'Tiếng Việt', uz:'Oʻzbekcha' };
+var XR = { before:'체험(전부터 응답)', after:'체험(후 응답)', none:'체험 안 함' };
+var GAME = { tycoon:'「주문이요」', story:'「Like Korean」' };
+var D2 = [
+  ['D2_1_fun','재미','더 재미있을 것 같다'],
+  ['D2_2_learn','학습 도움','한국어 학습에 더 도움'],
+  ['D2_3_immersion','몰입','더 몰입할 것 같다'],
+  ['D2_4_try','해 보고 싶음','더 해 보고 싶다'],
+  ['D2_5_ease','사용 용이성','사용하기 더 쉬울 것 같다']
+];
+var LEVELS = [
+  [-3,'--t3','「주문이요」 쪽 3'],[-2,'--t2','「주문이요」 쪽 2'],[-1,'--t1','「주문이요」 쪽 1'],
+  [0,'--mid','비슷함'],
+  [1,'--s1','「Like Korean」 쪽 1'],[2,'--s2','「Like Korean」 쪽 2'],[3,'--s3','「Like Korean」 쪽 3']
+];
+var BCON = [
+  { key:'presence', label:'실재감', note:'B2', items:['B2_presence'] },
+  { key:'immersion', label:'몰입', note:'B3 · 3문항', items:['B3_1','B3_2','B3_3'] },
+  { key:'fun', label:'재미', note:'B4 · B4-3 역코딩', items:['B4_1','B4_2','B4_3'], rev:['B4_3'] },
+  { key:'learn', label:'지각된 학습', note:'B5 · 3문항', items:['B5_1','B5_2','B5_3'] },
+  { key:'sat', label:'만족·사용의도', note:'B6 · 3문항', items:['B6_1','B6_2','B6_3'] },
+  { key:'usab', label:'사용성', note:'B7 · UMUX-LITE', items:['B7_1','B7_2'] },
+  { key:'m_story', label:'이야기 몰입', note:'B8-1 · 조작점검', items:['B8_1'], manip:true },
+  { key:'m_time', label:'시간 압박', note:'B8-2 · 조작점검', items:['B8_2'], manip:true }
+];
+var TCRIT = [12.706,4.303,3.182,2.776,2.571,2.447,2.365,2.306,2.262,2.228,2.201,2.179,2.160,2.145,2.131,2.120,2.110,2.101,2.093,2.086,2.080,2.074,2.069,2.064,2.060,2.056,2.052,2.048,2.045,2.042];
+
+var state = { all:[], key:null, timer:null, sheetUrl:'' };
+
+/* ---------- 유틸 ---------- */
+function el(tag, cls, text){ var e=document.createElement(tag); if(cls) e.className=cls; if(text!==undefined&&text!==null) e.textContent=text; return e; }
+function num(v){ if (v===''||v===null||v===undefined) return null; var n=Number(v); return isNaN(n)?null:n; }
+function mean(a){ return a.length ? a.reduce(function(s,x){return s+x;},0)/a.length : null; }
+function sd(a){ if (a.length<2) return null; var m=mean(a); return Math.sqrt(a.reduce(function(s,x){return s+(x-m)*(x-m);},0)/(a.length-1)); }
+function ci95(a){ if (a.length<2) return null; var df=a.length-1; var t=df<=30?TCRIT[df-1]:1.96; var h=t*sd(a)/Math.sqrt(a.length); return [mean(a)-h, mean(a)+h]; }
+function median(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}); var k=Math.floor(s.length/2); return s.length%2?s[k]:(s[k-1]+s[k])/2; }
+function f1(x){ return x===null?'–':x.toFixed(1); }
+function signed(x){ return x===null?'–':(x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1); }
+function pct(x){ return Math.round(x*100)+'%'; }
+function cssv(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function natLabel(r){ return r.A3_nationality==='OTHER' && r.A3_nationality_other ? '기타('+r.A3_nationality_other+')' : (NAT[r.A3_nationality]||'–'); }
+function fmtTime(iso){ if(!iso) return '–'; var d=new Date(iso); if(isNaN(d)) return String(iso); var p=function(n){return (n<10?'0':'')+n;}; return (d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+function tipAttr(node, value, key){ node.setAttribute('data-tip','1'); node.setAttribute('data-v',value); node.setAttribute('data-k',key||''); node.tabIndex=0; return node; }
+
+/* ---------- 데이터 ---------- */
+function toObjects(data){
+  var cols = data.columns || [];
+  return (data.rows || []).map(function(r){ var o={}; cols.forEach(function(c,i){ o[c]=r[i]; }); return o; });
+}
+function filtered(){
+  var fn = document.getElementById('fNat').value, fx = document.getElementById('fXr').value;
+  return state.all.filter(function(r){
+    if (fn && r.A3_nationality !== fn) return false;
+    if (fx === 'yes' && !(r.xr_play==='before'||r.xr_play==='after')) return false;
+    if (fx === 'none' && r.xr_play !== 'none') return false;
+    return true;
+  });
+}
+
+/* ---------- 그리기 ---------- */
+function render(){
+  var rows = filtered();
+  document.getElementById('fCount').textContent = rows.length + '명 / 전체 ' + state.all.length + '명';
+  renderKpis(rows); renderNat(rows); renderD1(rows); renderD2(rows); renderB(rows); renderOpen(rows); renderRecent(rows);
+}
+
+function tile(parent, lab, val, note, hero){
+  var t = el('div','tile'); t.appendChild(el('div','lab',lab)); t.appendChild(el('div','val'+(hero?' hero':''),val));
+  if (note) t.appendChild(el('div','note',note)); parent.appendChild(t);
+}
+
+function renderKpis(rows){
+  var box = document.getElementById('kpis'); box.innerHTML='';
+  var today = new Date().toDateString();
+  var nToday = rows.filter(function(r){ var d=new Date(r.timestamp); return !isNaN(d) && d.toDateString()===today; }).length;
+  var nXr = rows.filter(function(r){ return r.xr_play==='before'||r.xr_play==='after'; }).length;
+  var dur = median(rows.map(function(r){return num(r.duration_sec);}).filter(function(x){return x!==null;}));
+  tile(box,'응답 수', String(rows.length), '현재 필터 기준', true);
+  tile(box,'오늘 응답', String(nToday), new Date().toLocaleDateString('ko-KR'));
+  tile(box,'「주문이요」 체험', String(nXr), rows.length ? pct(nXr/rows.length)+' · 나머지는 영상만 시청' : '');
+  tile(box,'응답 시간 중앙값', dur===null?'–':(Math.floor(dur/60)+'분 '+Math.round(dur%60)+'초'), '첫 화면부터 제출까지');
+}
+
+function renderNat(rows){
+  var box = document.getElementById('natChart'); box.innerHTML='';
+  if (!rows.length) { box.appendChild(el('div','empty','아직 응답이 없습니다.')); return; }
+  var cnt = {}; rows.forEach(function(r){ var k=r.A3_nationality||'–'; cnt[k]=(cnt[k]||0)+1; });
+  var keys = Object.keys(cnt).sort(function(a,b){ return cnt[b]-cnt[a]; });
+  var max = cnt[keys[0]];
+  keys.forEach(function(k){
+    var row = el('div','hb'); row.appendChild(el('div','lab',NAT[k]||k));
+    var tr = el('div','track'); var b = el('div','bar'); b.style.width = (cnt[k]/max*100)+'%';
+    tipAttr(b, cnt[k]+'명 ('+pct(cnt[k]/rows.length)+')', NAT[k]||k); tr.appendChild(b); row.appendChild(tr);
+    row.appendChild(el('div','num',String(cnt[k]))); box.appendChild(row);
+  });
+}
+
+function renderD1(rows){
+  var box = document.getElementById('d1Chart'); box.innerHTML='';
+  var c = { tycoon:0, story:0 }; rows.forEach(function(r){ if (c[r.D1_choice]!==undefined) c[r.D1_choice]++; });
+  var n = c.tycoon + c.story;
+  if (!n) { box.appendChild(el('div','empty','아직 응답이 없습니다.')); return; }
+  var seg = el('div','seg');
+  [['tycoon','--tycoon'],['story','--story']].forEach(function(g){
+    if (!c[g[0]]) return;
+    var share = c[g[0]]/n; var d = el('div'); d.style.flex = String(c[g[0]]); d.style.background = 'var('+g[1]+')';
+    if (share >= 0.14) d.textContent = pct(share);
+    tipAttr(d, c[g[0]]+'명 ('+pct(share)+')', GAME[g[0]]); seg.appendChild(d);
+  });
+  box.appendChild(seg);
+  var lg = el('div','legend');
+  [['tycoon','--tycoon','「주문이요」 타이쿤형'],['story','--story','「Like Korean」 스토리형']].forEach(function(g){
+    var s = el('span'); var sw = el('span','sw'); sw.style.background='var('+g[1]+')'; s.appendChild(sw); s.appendChild(document.createTextNode(g[2])); lg.appendChild(s);
+  });
+  box.appendChild(lg);
+  var note = el('div','note'); note.style.cssText='color:var(--muted);font-size:12.5px;margin-top:8px';
+  note.textContent = '응답 ' + n + '명 · 「주문이요」 ' + c.tycoon + '명, 「Like Korean」 ' + c.story + '명';
+  box.appendChild(note);
+}
+
+function renderD2(rows){
+  var lg = document.getElementById('d2Legend'); lg.innerHTML='';
+  LEVELS.forEach(function(l){ var s=el('span'); var sw=el('span','sw'); sw.style.background='var('+l[1]+')'; s.appendChild(sw); s.appendChild(document.createTextNode(l[2])); lg.appendChild(s); });
+  var box = document.getElementById('d2Chart'); box.innerHTML='';
+  var stats = D2.map(function(d){
+    var vals = rows.map(function(r){return num(r[d[0]]);}).filter(function(x){return x!==null;});
+    var counts = {}; LEVELS.forEach(function(l){ counts[l[0]] = 0; }); vals.forEach(function(v){ if (counts[v]!==undefined) counts[v]++; });
+    return { d:d, n:vals.length, counts:counts, mean:mean(vals) };
+  });
+  if (!stats.some(function(s){return s.n;})) { box.appendChild(el('div','empty','아직 응답이 없습니다.')); renderD2Table(stats); return; }
+  var sides = el('div','sides'); sides.appendChild(el('span')); var si = el('div','in');
+  si.appendChild(el('span',null,'← 「주문이요」 쪽')); si.appendChild(el('span',null,'「Like Korean」 쪽 →')); sides.appendChild(si); sides.appendChild(el('span')); box.appendChild(sides);
+  stats.forEach(function(s){
+    var row = el('div','dv dvrow');
+    var lab = el('div','lab',s.d[1]); lab.appendChild(el('small',null,s.d[2])); row.appendChild(lab);
+    var tr = el('div','track');
+    [0,25,50,75,100].forEach(function(p){ var g=el('div','gl'+(p===50?' c':'')); g.style.left=p+'%'; tr.appendChild(g); });
+    if (s.n) {
+      // 중립(0)은 가운데선을 기준으로 반씩 나눈다. 트랙 반쪽 = 응답 100%.
+      var left = (s.counts[-3]+s.counts[-2]+s.counts[-1]+s.counts[0]/2)/s.n;
+      var x = 50 - left*50; var segs = [];
+      LEVELS.forEach(function(l){
+        var c = s.counts[l[0]]; if (!c) return; var w = c/s.n*50;
+        var g = el('div','sgm'); g.style.left = x+'%'; g.style.width = w+'%'; g.style.background='var('+l[1]+')';
+        tipAttr(g, c+'명 ('+pct(c/s.n)+')', s.d[1]+' · '+l[2]); tr.appendChild(g); segs.push(g); x += w;
+      });
+      if (segs.length) { segs[0].style.borderRadius='4px 0 0 4px'; var last=segs[segs.length-1]; last.style.borderRadius = segs.length===1?'4px':'0 4px 4px 0'; last.style.borderRight='0'; }
+    }
+    row.appendChild(tr);
+    var m = el('div','m', s.n ? '평균 '+signed(s.mean) : '–'); m.appendChild(el('small',null,'n='+s.n)); row.appendChild(m);
+    box.appendChild(row);
+  });
+  var ax = el('div','axis'); ax.appendChild(el('span')); var tk = el('div','ticks');
+  [['100%',0],['50%',25],['0',50],['50%',75],['100%',100]].forEach(function(t){ var s=el('span',null,t[0]); s.style.left=t[1]+'%'; tk.appendChild(s); });
+  ax.appendChild(tk); ax.appendChild(el('span')); box.appendChild(ax);
+  renderD2Table(stats);
+}
+function renderD2Table(stats){
+  var box = document.getElementById('d2Table'); box.innerHTML='';
+  var t = el('table'); var h = el('tr'); h.appendChild(el('th',null,'영역'));
+  LEVELS.forEach(function(l){ h.appendChild(el('th','n', l[0]>0?'+'+l[0]:String(l[0]))); });
+  h.appendChild(el('th','n','n')); h.appendChild(el('th','n','평균')); t.appendChild(h);
+  stats.forEach(function(s){ var r=el('tr'); r.appendChild(el('td',null,s.d[1])); LEVELS.forEach(function(l){ r.appendChild(el('td','n',String(s.counts[l[0]]))); });
+    r.appendChild(el('td','n',String(s.n))); r.appendChild(el('td','n',signed(s.mean))); t.appendChild(r); });
+  box.appendChild(t);
+}
+
+function personScore(r, con){
+  var v = con.items.map(function(k){ var x=num(r[k]); if (x===null) return null; return (con.rev && con.rev.indexOf(k)>=0) ? 8-x : x; });
+  if (v.some(function(x){return x===null;})) return null; return mean(v);
+}
+function renderB(rows){
+  var b = rows.filter(function(r){ return r.xr_play==='before'||r.xr_play==='after'; });
+  var mini = document.getElementById('bMini'); mini.innerHTML='';
+  var sick = b.map(function(r){return num(r.B1_sick);}).filter(function(x){return x!==null;});
+  var delta = b.filter(function(r){ return r.xr_play==='before' && num(r.B1_sick)!==null && num(r.A10_sick_base)!==null; })
+               .map(function(r){ return num(r.B1_sick)-num(r.A10_sick_base); });
+  tile(mini,'체험 응답', String(b.length)+'명', '체험 전부터 응답 ' + b.filter(function(r){return r.xr_play==='before';}).length + '명');
+  tile(mini,'체험 후 멀미 평균', sick.length ? f1(mean(sick))+' / 20' : '–', '0 = 전혀 없음');
+  tile(mini,'체험 전 대비 멀미 변화', delta.length ? signed(mean(delta)) : '–', delta.length ? 'n='+delta.length+' (전·후 모두 응답)' : '체험 전 응답자 없음');
+  var box = document.getElementById('bChart'); box.innerHTML='';
+  var stats = BCON.map(function(con){ var s = b.map(function(r){return personScore(r,con);}).filter(function(x){return x!==null;}); return { con:con, n:s.length, mean:mean(s), ci:ci95(s) }; });
+  if (!b.length) { box.appendChild(el('div','empty','체험 응답이 아직 없습니다.')); renderBTable(stats); return; }
+  var pos = function(v){ return (Math.max(1,Math.min(7,v))-1)/6*100; };
+  var manipShown = false;
+  stats.forEach(function(s){
+    if (s.con.manip && !manipShown) { box.appendChild(el('div','grp','조작점검 — 「주문이요」는 이야기 몰입보다 시간 압박이 높게 나와야 함')); manipShown = true; }
+    var row = el('div','dp'); var lab = el('div',null,s.con.label); var sm = el('small',null,' '+s.con.note); sm.style.color='var(--muted)'; sm.style.fontSize='12px'; lab.appendChild(sm); row.appendChild(lab);
+    var tr = el('div','track');
+    for (var i=1;i<=7;i++){ var g=el('div','gl'+(i===4?' c':'')); g.style.left=pos(i)+'%'; tr.appendChild(g); }
+    if (s.n) {
+      if (s.ci) { var c=el('div','ci'); var a=pos(s.ci[0]), z=pos(s.ci[1]); c.style.left=a+'%'; c.style.width=Math.max(z-a,0.5)+'%'; tr.appendChild(c); }
+      var d=el('div','dot'); d.style.left=pos(s.mean)+'%'; tr.appendChild(d);
+      var h=el('div','hit'); h.style.left=pos(s.mean)+'%';
+      tipAttr(h, '평균 '+f1(s.mean)+(s.ci?' (95% CI '+f1(s.ci[0])+'–'+f1(s.ci[1])+')':''), s.con.label+' · n='+s.n); tr.appendChild(h);
+    }
+    row.appendChild(tr);
+    var m = el('div','m', s.n?f1(s.mean):'–'); m.appendChild(el('small',null,'n='+s.n)); row.appendChild(m);
+    box.appendChild(row);
+  });
+  var ax = el('div','dpaxis'); ax.appendChild(el('span')); var tk = el('div','ticks');
+  for (var i=1;i<=7;i++){ var s=el('span',null,String(i)); s.style.left=pos(i)+'%'; tk.appendChild(s); }
+  ax.appendChild(tk); ax.appendChild(el('span')); box.appendChild(ax);
+  renderBTable(stats);
+}
+function renderBTable(stats){
+  var box = document.getElementById('bTable'); box.innerHTML='';
+  var t = el('table'); var h=el('tr'); ['영역','문항','n','평균','95% CI 하한','95% CI 상한'].forEach(function(x,i){ h.appendChild(el('th',i>=2?'n':null,x)); }); t.appendChild(h);
+  stats.forEach(function(s){ var r=el('tr'); r.appendChild(el('td',null,s.con.label)); r.appendChild(el('td',null,s.con.note));
+    r.appendChild(el('td','n',String(s.n))); r.appendChild(el('td','n',f1(s.mean))); r.appendChild(el('td','n',s.ci?f1(s.ci[0]):'–')); r.appendChild(el('td','n',s.ci?f1(s.ci[1]):'–')); t.appendChild(r); });
+  box.appendChild(t);
+}
+
+function renderOpen(rows){
+  var box = document.getElementById('openList'); box.innerHTML='';
+  var list = rows.filter(function(r){ return r.O1_reason || r.O2_combine || r.O3_video; })
+                 .sort(function(a,b){ return String(b.timestamp).localeCompare(String(a.timestamp)); });
+  if (!list.length) { box.appendChild(el('div','empty','아직 개방형 응답이 없습니다.')); return; }
+  list.forEach(function(r){
+    var it = el('div','oe'); var meta = el('div','meta');
+    var bits = [r.participant_id || '번호 없음', natLabel(r), LANG[r.ui_lang]||r.ui_lang||'', fmtTime(r.timestamp)];
+    meta.appendChild(document.createTextNode(bits.filter(String).join(' · ') + ' · '));
+    if (GAME[r.D1_choice]) { var ch = el('span','chip'); var sw=el('span','sw'); sw.style.background = 'var('+(r.D1_choice==='tycoon'?'--tycoon':'--story')+')'; ch.appendChild(sw); ch.appendChild(document.createTextNode('D1 '+GAME[r.D1_choice])); meta.appendChild(ch); }
+    it.appendChild(meta);
+    [['O1_reason','고른 이유'],['O2_combine','두 게임을 합친다면'],['O3_video','영상으로 판단하기 어려웠던 점']].forEach(function(q){
+      if (!r[q[0]]) return; var p = el('div','qa'); p.appendChild(el('b',null,q[1])); p.appendChild(document.createTextNode(String(r[q[0]]))); it.appendChild(p);
+    });
+    box.appendChild(it);
+  });
+}
+
+function renderRecent(rows){
+  var box = document.getElementById('recent'); box.innerHTML='';
+  if (!rows.length) { box.appendChild(el('div','empty','아직 응답이 없습니다.')); return; }
+  var list = rows.slice().sort(function(a,b){ return String(b.timestamp).localeCompare(String(a.timestamp)); }).slice(0,20);
+  var t = el('table'); var h = el('tr');
+  [['제출 시각'],['참여 번호'],['국적'],['언어'],['「주문이요」 체험'],['D1 선택'],['소요 시간','n']].forEach(function(c){ h.appendChild(el('th',c[1]||null,c[0])); }); t.appendChild(h);
+  list.forEach(function(r){
+    var tr = el('tr'); var d = num(r.duration_sec);
+    [fmtTime(r.timestamp), r.participant_id||'–', natLabel(r), LANG[r.ui_lang]||r.ui_lang||'–', XR[r.xr_play]||'–', GAME[r.D1_choice]||'–'].forEach(function(v){ tr.appendChild(el('td',null,v)); });
+    tr.appendChild(el('td','n', d===null?'–':(Math.floor(d/60)+'분 '+Math.round(d%60)+'초'))); t.appendChild(tr);
+  });
+  box.appendChild(t);
+}
+
+/* ---------- 툴팁 ---------- */
+(function(){
+  var tip = document.getElementById('tip');
+  function show(t, x, y){ tip.innerHTML=''; tip.appendChild(el('div','v',t.getAttribute('data-v'))); if (t.getAttribute('data-k')) tip.appendChild(el('div','k',t.getAttribute('data-k'))); tip.style.display='block';
+    var w = tip.offsetWidth, hgt = tip.offsetHeight; var left = Math.min(x + 12, window.innerWidth - w - 8); var top = y - hgt - 12; if (top < 8) top = y + 16; tip.style.left = left + 'px'; tip.style.top = top + 'px'; }
+  document.addEventListener('pointermove', function(e){ var t = e.target.closest && e.target.closest('[data-tip]'); if (t) show(t, e.clientX, e.clientY); else tip.style.display='none'; });
+  document.addEventListener('focusin', function(e){ var t = e.target.closest && e.target.closest('[data-tip]'); if (t) { var r = t.getBoundingClientRect(); show(t, r.left + r.width/2, r.top); } });
+  document.addEventListener('focusout', function(){ tip.style.display='none'; });
+})();
+
+/* ---------- 불러오기 ---------- */
+function setStatus(text, isErr){ var s=document.getElementById('status'); s.textContent=text; s.className = isErr ? 'err' : ''; }
+function onData(data){
+  document.getElementById('main').classList.remove('loading');
+  state.all = toObjects(data);
+  if (data.sheetUrl && !state.sheetUrl) { state.sheetUrl = data.sheetUrl; var a = el('a',null,'· 응답 시트 열기'); a.href = data.sheetUrl; a.target = '_blank'; a.rel='noopener'; document.getElementById('sheetLink').appendChild(a); }
+  var now = new Date(); var p=function(n){return (n<10?'0':'')+n;};
+  setStatus('총 ' + state.all.length + '건 · 마지막 갱신 ' + p(now.getHours())+':'+p(now.getMinutes())+':'+p(now.getSeconds()));
+  render();
+}
+function onErr(e){ document.getElementById('main').classList.remove('loading'); setStatus('데이터를 불러오지 못했습니다. 주소의 key 값과 배포 버전을 확인해 주세요. (' + (e && e.message ? e.message : e) + ')', true); }
+function load(){
+  document.getElementById('main').classList.add('loading');
+  if (!LIVE) { setTimeout(function(){ onData(mockData()); }, 50); return; }
+  if (!GAS) {
+    var key = ''; try { key = new URLSearchParams(location.search).get('key') || ''; } catch (e) {}
+    fetch(API_URL + (API_URL.indexOf('?') >= 0 ? '&' : '?') + 'action=dashboard&key=' + encodeURIComponent(key))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (!d || d.ok === false) onErr({ message: (d && d.error) || 'no data' }); else onData(d); })
+      .catch(onErr);
+    return;
+  }
+  var go = function(){ google.script.run.withSuccessHandler(onData).withFailureHandler(onErr).getDashboardData(state.key); };
+  if (state.key === null) google.script.url.getLocation(function(loc){ state.key = (loc && loc.parameter && loc.parameter.key) || ''; go(); });
+  else go();
+}
+function schedule(){ if (state.timer) clearInterval(state.timer); if (document.getElementById('auto').checked) state.timer = setInterval(load, 30000); }
+
+/* ---------- 미리보기용 예시 데이터 (웹 앱에서는 쓰이지 않음) ---------- */
+function mockData(){
+  var seed = 7; var rnd = function(){ seed = (seed*16807) % 2147483647; return (seed-1)/2147483646; };
+  var pick = function(a){ return a[Math.floor(rnd()*a.length)]; };
+  var lik = function(c){ return Math.max(1, Math.min(7, Math.round(c + (rnd()-0.5)*3))); };
+  var cols = ['timestamp','participant_id','video_order','ui_lang','A3_nationality','A3_nationality_other','consent','A1_age','A2_gender','A4_kor_period','A5_topik','A6_game_freq','A7_pref_tycoon','A8_pref_story','A9_xr_exp','xr_play','A10_sick_base','B1_sick','B2_presence','B3_1','B3_2','B3_3','B4_1','B4_2','B4_3','B5_1','B5_2','B5_3','B6_1','B6_2','B6_3','B7_1','B7_2','B8_1','B8_2','D1_choice','D2_1_fun','D2_2_learn','D2_3_immersion','D2_4_try','D2_5_ease','O1_reason','O2_combine','O3_video','duration_sec','user_agent'];
+  var nats = ['KR','KR','JP','VN','VN','UZ','JP','JP','UZ','VN','VN','JP','UZ','VN','JP'];
+  var langs = { KR:'ko', JP:'ja', VN:'vi', UZ:'uz' };
+  var texts = { ko:['주문하는 장면이 실제 같아서 좋았어요.','스토리 속에서 주문 연습을 하면 좋겠어요.',''], ja:['ストーリーがあるほうが続けやすそう。','お店の運営とストーリーを合わせてほしい。','操作の難しさは動画ではわからない。'], vi:['Trò chơi gọi món có vẻ thực tế.','Kết hợp cốt truyện với nhiệm vụ gọi món.',''], uz:['Hikoya qiziqarli koʻrindi.','',''] };
+  var now = Date.now(); var rows = [];
+  nats.forEach(function(n, i){
+    var o = {}; var xp = i%3===0 ? 'none' : (i%3===1 ? 'before' : 'after'); var lang = langs[n];
+    o.timestamp = new Date(now - (nats.length - i) * 37 * 60000).toISOString(); o.participant_id = 'P' + (i<9?'0':'') + (i+1);
+    o.video_order = i%2 ? 'BA' : 'AB'; o.ui_lang = lang; o.A3_nationality = n; o.consent = 'Y';
+    o.A1_age = pick([1,1,2,2,3]); o.A2_gender = pick([1,2,2,3]); o.A4_kor_period = n==='KR' ? 6 : pick([2,3,3,4,5]); o.A5_topik = n==='KR' ? '' : pick([0,1,2,2,3,4]);
+    o.A6_game_freq = pick([1,2,3,4,5]); o.A7_pref_tycoon = lik(4.5); o.A8_pref_story = lik(4.5); o.A9_xr_exp = pick([1,1,2,3]); o.xr_play = xp;
+    if (xp !== 'none') {
+      if (xp === 'before') o.A10_sick_base = pick([0,0,1,2]);
+      o.B1_sick = pick([0,1,2,3,5]); o.B2_presence = lik(5);
+      ['B3_1','B3_2','B3_3'].forEach(function(k){ o[k] = lik(4.8); }); o.B4_1 = lik(5.6); o.B4_2 = lik(5.6); o.B4_3 = lik(2.4);
+      ['B5_1','B5_2','B5_3'].forEach(function(k){ o[k] = lik(5.2); }); ['B6_1','B6_2','B6_3'].forEach(function(k){ o[k] = lik(5); });
+      o.B7_1 = lik(5); o.B7_2 = lik(5.5); o.B8_1 = lik(2.8); o.B8_2 = lik(5.4);
+    }
+    o.D1_choice = rnd() < 0.55 ? 'story' : 'tycoon';
+    var bias = o.D1_choice === 'story' ? 1 : -1;
+    o.D2_1_fun = Math.max(-3, Math.min(3, Math.round(bias*1.2 + (rnd()-0.5)*3))); o.D2_2_learn = Math.max(-3, Math.min(3, Math.round(-0.6 + (rnd()-0.5)*4)));
+    o.D2_3_immersion = Math.max(-3, Math.min(3, Math.round(1.4 + (rnd()-0.5)*3))); o.D2_4_try = Math.max(-3, Math.min(3, Math.round(bias*1.5 + (rnd()-0.5)*2)));
+    o.D2_5_ease = Math.max(-3, Math.min(3, Math.round(-1 + (rnd()-0.5)*3)));
+    var tx = texts[lang]; o.O1_reason = tx[0]; o.O2_combine = tx[1]; o.O3_video = tx[2];
+    o.duration_sec = 420 + Math.round(rnd()*600); o.user_agent = '';
+    rows.push(cols.map(function(c){ return o[c] === undefined ? '' : o[c]; }));
+  });
+  return { columns: cols, rows: rows, sheetUrl: '', generatedAt: new Date().toISOString() };
+}
+
+/* ---------- 시작 ---------- */
+document.getElementById('banner').hidden = LIVE;
+document.getElementById('refresh').addEventListener('click', load);
+document.getElementById('auto').addEventListener('change', schedule);
+document.getElementById('fNat').addEventListener('change', render);
+document.getElementById('fXr').addEventListener('change', render);
+load(); schedule();
+</script>
+</body>
+</html>
